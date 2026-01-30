@@ -6,13 +6,16 @@ import { generateChileanPlan } from './services/geminiService';
 const App: React.FC = () => {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [loadingStep, setLoadingStep] = useState(0);
   const [plan, setPlan] = useState<NutritionPlan | null>(null);
   const [activeDayIdx, setActiveDayIdx] = useState(0);
   
   const [formData, setFormData] = useState<NutriFormData>({
     name: '', age: 30, gender: 'female', stressLevel: 'moderate', smoking: false,
-    alcoholConsumption: 'none', sedentaryHours: 8, consultationReason: '', insulinResistanceHistory: false,
+    alcoholConsumption: 'none', sedentaryHours: 8, consultationReason: '', 
+    specificResultGoal: '', treatmentAspiration: '',
+    insulinResistanceHistory: false,
     medicalConditions: ['Ninguna'], otherMedicalCondition: '', medications: '', familyHistory: '',
     weight: 0, height: 165, waistCircumference: 0,
     maxWeightReached: 0, minWeightAdult: 0, recentWeightFluctuations: '', targetWeight: 0,
@@ -32,53 +35,6 @@ const App: React.FC = () => {
     socialSupport: '', diet24hRecall: ''
   });
 
-  const consultationReasons = [
-    "Bajar de peso y reducción de grasa corporal",
-    "Aumento de masa muscular (Hipertrofia)",
-    "Control de Resistencia a la Insulina / SOP / Diabetes",
-    "Mejora de salud digestiva (Hinchazón, colon, reflujo)",
-    "Optimización de rendimiento deportivo / Atleta",
-    "Bienestar general y longevidad",
-    "Otro (especificar abajo)"
-  ];
-
-  const commonAllergiesList = [
-    "Gluten", "Lactosa", "Frutos Secos", "Mariscos", "Huevo", "Soya", "Pescado", "Legumbres"
-  ];
-
-  const dietDescriptions: Record<string, string> = {
-    'Equilibrada': 'Proporciones sanas de todos los macronutrientes para bienestar general.',
-    'Keto': 'Muy baja en carbohidratos y alta en grasas para entrar en cetosis y quemar grasa.',
-    'LowCarb': 'Reducción moderada de azúcares y harinas para control glucémico.',
-    'Mediterranea': 'Rica en vegetales, pescados y grasas buenas. Muy cardiosaludable.',
-    'Ayuno Intermitente': 'Ciclos de ayuno (ej. 16/8) para mejorar la sensibilidad a la insulina.',
-    'Vegana': 'Exclusión de todo producto animal. Enfoque en proteínas vegetales.',
-    'Paleo': 'Basada en alimentos no procesados: carnes, pescados, frutas y semillas. Sin granos ni legumbres.',
-    'Dukan': 'Dieta por fases con alto contenido proteico para una pérdida de peso rápida y controlada.',
-    'Flexitariana': 'Vegetariana la mayor parte del tiempo, con consumo ocasional y flexible de carne.',
-    'Sin gluten y sin lácteos': 'Dieta antiinflamatoria diseñada para mejorar la digestión y reducir la hinchazón sistémica.',
-    'Otro': 'Cualquier otro protocolo específico o indicación médica que estés siguiendo actualmente.'
-  };
-
-  const activityLevels = [
-    { id: 'sedentary', label: 'Sedentario', desc: 'Poca o nula actividad física.' },
-    { id: 'light', label: 'Ligero', desc: 'Actividad 1-2 veces por semana.' },
-    { id: 'moderate', label: 'Moderado', desc: 'Actividad 3-4 veces por semana.' },
-    { id: 'active', label: 'Activo', desc: 'Actividad diaria intensa.' },
-    { id: 'athlete', label: 'Atleta', desc: 'Entrenamiento de alto rendimiento.' }
-  ];
-
-  const activitySegments = [
-    { id: 'no-hago', label: 'No hago actividad', icon: 'fa-xmark' },
-    { id: 'pesas', label: 'Pesas / Fuerza', icon: 'fa-dumbbell' },
-    { id: 'cardio', label: 'Cardiovascular', icon: 'fa-heart-pulse' },
-    { id: 'caminar', label: 'Salir a caminar', icon: 'fa-person-walking' },
-    { id: 'deporte', label: 'Deporte Equipo', icon: 'fa-volleyball' },
-    { id: 'yoga', label: 'Yoga / Pilates', icon: 'fa-spa' },
-    { id: 'funcional', label: 'Funcional / HIIT', icon: 'fa-bolt' },
-    { id: 'running', label: 'Running / Ciclismo', icon: 'fa-person-running' }
-  ];
-
   const liveBMI = useMemo(() => {
     if (formData.weight > 0 && formData.height > 0) {
       const heightInMeters = formData.height / 100;
@@ -87,36 +43,40 @@ const App: React.FC = () => {
     return '0.0';
   }, [formData.weight, formData.height]);
 
-  const estimatedExerciseBurn = useMemo(() => {
-    if (!formData.exerciseType || formData.exerciseType === 'No hago actividad' || formData.exerciseFrequency === 0) return 0;
-    
-    let baseBurn = 0;
-    const type = formData.exerciseType.toLowerCase();
-    if (type.includes('pesas') || type.includes('fuerza')) baseBurn = 300;
-    else if (type.includes('cardio') || type.includes('running')) baseBurn = 400;
-    else if (type.includes('hiit') || type.includes('funcional')) baseBurn = 450;
-    else baseBurn = 180;
+  const specificGoals = [
+    "Perder grasa corporal rápido",
+    "Controlar la ansiedad por comer",
+    "Reducir medidas en cintura",
+    "Aprender a comer porciones pequeñas",
+    "Mejorar salud digestiva",
+    "Desinflamar el abdomen",
+    "Cambio de hábitos de por vida"
+  ];
 
-    // Multiplicador por Nivel de Actividad
-    let multiplier = 1.0;
-    switch(formData.activityLevel) {
-      case 'sedentary': multiplier = 0.8; break;
-      case 'light': multiplier = 0.9; break;
-      case 'moderate': multiplier = 1.0; break;
-      case 'active': multiplier = 1.25; break;
-      case 'athlete': multiplier = 1.6; break;
-    }
+  const activityLevels = [
+    { id: 'sedentary', label: 'Sedentario', desc: 'Poca o nula actividad física.' },
+    { id: 'light', label: 'Ligero', desc: 'Actividad 1-2 veces por semana.' },
+    { id: 'moderate', label: 'Moderado', desc: 'Actividad 3-4 veces por semana.' },
+    { id: 'active', label: 'Activo', desc: 'Actividad diaria intensa.' }
+  ];
 
-    return Math.round((baseBurn * multiplier * formData.exerciseFrequency) / 7);
-  }, [formData.exerciseType, formData.exerciseFrequency, formData.activityLevel]);
+  const dietDescriptions: Record<string, string> = {
+    'Equilibrada': 'Proporciones sanas de todos los macronutrientes para bienestar general.',
+    'Keto': 'Muy baja en carbohidratos y alta en grasas para quemar grasa.',
+    'LowCarb': 'Reducción moderada de azúcares y harinas.',
+    'Mediterranea': 'Rica en vegetales, pescados y grasas buenas.',
+    'Vegana': 'Exclusión de todo producto animal.',
+    'Ayuno Intermitente': 'Ciclos de ayuno (ej: 16/8) para mejorar sensibilidad a la insulina.',
+    'Sin gluten y sin lácteos': 'Dieta antiinflamatoria diseñada para reducir hinchazón.'
+  };
 
   const loadingMessages = [
-    "Sincronizando perfiles Balloom...",
-    "Analizando marcadores de cortisol y resistencia...",
-    "Calculando impacto por nivel de actividad...",
-    "Estructurando tu protocolo de ejercicio...",
-    "Calculando calorías y macros por opción...",
-    "Generando plan maestro de 7 días con propuesta de ayuno..."
+    "Sincronizando con CBS Nutri-Core Chile...",
+    "Analizando marcadores de saciedad...",
+    "Buscando ingredientes de temporada en ferias locales...",
+    "Calculando horarios óptimos para Balloon Slim...",
+    "Estructurando opciones económicas y saludables...",
+    "Finalizando plan maestro personalizado..."
   ];
 
   useEffect(() => {
@@ -129,16 +89,43 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [loading]);
 
-  const toggleAllergy = (allergy: string) => {
-    const current = [...formData.commonAllergies];
-    const index = current.indexOf(allergy);
-    if (index > -1) {
-      current.splice(index, 1);
-    } else {
-      current.push(allergy);
+  const handleGenerate = async () => {
+    if (!formData.name.trim() || formData.weight <= 0 || formData.height <= 0) {
+      setError("Por favor, completa los datos básicos (Nombre, Peso y Altura).");
+      return;
     }
-    setFormData({...formData, commonAllergies: current});
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await generateChileanPlan(formData);
+      setPlan(result);
+      setActiveDayIdx(0);
+    } catch (err: any) {
+      console.error(err);
+      setError("Error al conectar con el servidor Balloom. Intenta de nuevo.");
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const Logo = () => (
+    <div className="flex flex-col items-center">
+      <div className="text-[11px] font-black text-[#4B2C69] tracking-[0.2em] uppercase mb-1">CONTROL</div>
+      <div className="relative w-20 h-20 flex items-center justify-center">
+        <svg viewBox="0 0 100 100" className="w-full h-full">
+          <circle cx="50" cy="50" r="45" fill="none" stroke="#E6E2D3" strokeWidth="1" />
+          <path d="M50 5 C 75 5, 95 25, 95 50 C 95 75, 75 95, 50 95 C 25 95, 5 75, 5 50 C 5 25, 25 5, 50 5" fill="none" stroke="#4B2C69" strokeWidth="4" />
+          <text x="50" y="58" fontFamily="Plus Jakarta Sans" fontSize="32" fontWeight="900" textAnchor="middle" fill="#4B2C69">B</text>
+          <text x="50" y="72" fontFamily="Plus Jakarta Sans" fontSize="8" fontWeight="800" textAnchor="middle" fill="#4B2C69" letterSpacing="2">CBS</text>
+          <circle cx="85" cy="40" r="4" fill="#4B2C69" />
+        </svg>
+      </div>
+      <div className="text-[12px] font-black text-[#4B2C69] tracking-[0.1em] uppercase mt-1 relative">
+        BALLOOM SLIM
+        <div className="absolute -bottom-1 left-0 w-full h-[1.5px] bg-[#C5A059]"></div>
+      </div>
+    </div>
+  );
 
   const renderStep = () => {
     switch(step) {
@@ -146,62 +133,37 @@ const App: React.FC = () => {
         return (
           <div className="space-y-6 animate-in slide-in-from-right-4">
             <h3 className="text-xl font-black text-slate-800 flex items-center gap-2 uppercase tracking-tighter">
-              <i className="fas fa-id-card text-rose-600"></i> 1. Identificación y Antecedentes
+              <i className="fas fa-id-card text-[#4B2C69]"></i> 1. Identificación y Objetivos
             </h3>
             <div className="grid md:grid-cols-2 gap-4">
               <div className="col-span-2">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Nombre Completo</label>
-                <input className="w-full bg-slate-50 border p-3 rounded-xl outline-none" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+                <input className="w-full bg-slate-50 border p-3 rounded-xl outline-none focus:ring-2 focus:ring-[#4B2C69]/20" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+              </div>
+              <div className="col-span-2 space-y-4 py-4 border-y border-slate-100">
+                <label className="text-[10px] font-black text-[#4B2C69] uppercase tracking-widest block">¿Qué resultado buscas lograr?</label>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  {specificGoals.map(goal => (
+                    <button key={goal} onClick={() => setFormData({...formData, specificResultGoal: goal})} className={`p-3 rounded-xl text-[10px] font-bold uppercase border transition-all ${formData.specificResultGoal === goal ? 'bg-[#4B2C69] text-white border-[#4B2C69]' : 'bg-white text-slate-400 border-slate-200'}`}>{goal}</button>
+                  ))}
+                </div>
               </div>
               <div className="col-span-2">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Motivo de Consulta Principal</label>
-                <select 
-                  className="w-full bg-slate-50 border p-3 rounded-xl outline-none mb-2" 
-                  value={consultationReasons.includes(formData.consultationReason) ? formData.consultationReason : (formData.consultationReason === '' ? '' : 'Otro (especificar abajo)')}
-                  onChange={e => {
-                    const val = e.target.value;
-                    if (val === "Otro (especificar abajo)") {
-                      setFormData({...formData, consultationReason: ''});
-                    } else {
-                      setFormData({...formData, consultationReason: val});
-                    }
-                  }}
-                >
-                  <option value="" disabled>Selecciona un motivo...</option>
-                  {consultationReasons.map((reason, idx) => (
-                    <option key={idx} value={reason}>{reason}</option>
-                  ))}
-                </select>
-                {(!consultationReasons.includes(formData.consultationReason) || formData.consultationReason === "Otro (especificar abajo)") && (
-                  <input 
-                    className="w-full bg-white border-2 border-rose-100 p-3 rounded-xl outline-none animate-in fade-in slide-in-from-top-1" 
-                    value={formData.consultationReason === "Otro (especificar abajo)" ? "" : formData.consultationReason} 
-                    onChange={e => setFormData({...formData, consultationReason: e.target.value})} 
-                    placeholder="Escribe tu motivo específico aquí..." 
-                  />
-                )}
+                <label className="text-[10px] font-black text-[#4B2C69] uppercase tracking-widest block mb-1">¿A qué aspiras con este tratamiento?</label>
+                <textarea className="w-full bg-slate-50 border p-3 rounded-xl text-xs h-20 outline-none" placeholder="Ej: Sentirme más liviana, recuperar mi ropa anterior..." value={formData.treatmentAspiration} onChange={e => setFormData({...formData, treatmentAspiration: e.target.value})} />
               </div>
               <div>
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Edad</label>
                 <input type="number" className="w-full bg-slate-50 border p-3 rounded-xl" value={formData.age || ''} onChange={e => setFormData({...formData, age: Number(e.target.value)})} />
               </div>
               <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Nivel de Estrés</label>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Ansiedad / Estrés</label>
                 <select className="w-full bg-slate-50 border p-3 rounded-xl" value={formData.stressLevel} onChange={e => setFormData({...formData, stressLevel: e.target.value as any})}>
                   <option value="low">Bajo</option>
                   <option value="moderate">Moderado</option>
                   <option value="high">Alto</option>
                   <option value="extreme">Extremo</option>
                 </select>
-              </div>
-              <div className="col-span-2 bg-rose-50/50 p-4 rounded-2xl border border-rose-100/50">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" checked={formData.insulinResistanceHistory} onChange={e => setFormData({...formData, insulinResistanceHistory: e.target.checked})} className="accent-rose-600 w-5 h-5" />
-                  <div>
-                    <span className="text-[10px] font-black uppercase text-rose-900 block">Diagnóstico de Resistencia a la Insulina</span>
-                    <span className="text-[9px] text-rose-400 font-bold uppercase">Prediabetes / Sop / Síndrome Metabólico</span>
-                  </div>
-                </label>
               </div>
             </div>
           </div>
@@ -210,11 +172,11 @@ const App: React.FC = () => {
         return (
           <div className="space-y-6 animate-in slide-in-from-right-4">
             <h3 className="text-xl font-black text-slate-800 flex items-center gap-2 uppercase tracking-tighter">
-              <i className="fas fa-ruler-combined text-rose-600"></i> 2. Antropometría
+              <i className="fas fa-ruler-combined text-[#4B2C69]"></i> 2. Antropometría
             </h3>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Peso Actual (kg)</label>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Peso (kg)</label>
                 <input type="number" className="w-full bg-slate-50 border p-3 rounded-xl font-black" value={formData.weight || ''} onChange={e => setFormData({...formData, weight: Number(e.target.value)})} />
               </div>
               <div>
@@ -222,21 +184,21 @@ const App: React.FC = () => {
                 <input type="number" className="w-full bg-slate-50 border p-3 rounded-xl" value={formData.height || ''} onChange={e => setFormData({...formData, height: Number(e.target.value)})} />
               </div>
               <div>
-                <label className="text-[10px] font-bold text-rose-600 uppercase tracking-widest block mb-1">Cintura (cm)</label>
-                <input type="number" className="w-full bg-rose-50 border border-rose-100 p-3 rounded-xl font-black text-rose-600" value={formData.waistCircumference || ''} onChange={e => setFormData({...formData, waistCircumference: Number(e.target.value)})} />
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Cintura (cm)</label>
+                <input type="number" className="w-full bg-slate-50 border p-3 rounded-xl" value={formData.waistCircumference || ''} onChange={e => setFormData({...formData, waistCircumference: Number(e.target.value)})} />
               </div>
-              <div className="col-span-full bg-slate-900 p-4 rounded-2xl text-white shadow-lg flex items-center justify-between">
+              <div className="col-span-full bg-[#4B2C69] p-5 rounded-2xl text-white flex justify-between items-center shadow-lg">
                 <div>
-                  <p className="text-[9px] font-black uppercase opacity-60 tracking-[0.2em]">IMC Calculado</p>
-                  <p className="text-2xl font-black tracking-tighter">{liveBMI}</p>
+                  <p className="text-[9px] font-black uppercase opacity-60">IMC Actual</p>
+                  <p className="text-3xl font-black">{liveBMI}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs font-bold uppercase text-rose-400">{Number(liveBMI) < 25 ? 'Normal' : 'Intervención Recomendada'}</p>
+                  <p className="text-[10px] font-bold uppercase text-[#C5A059]">{Number(liveBMI) > 25 ? 'Déficit Calórico' : 'Saludable'}</p>
                 </div>
               </div>
-              <div className="col-span-full border-t pt-4">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-3">Peso Objetivo</label>
-                <input type="number" className="w-full bg-rose-100/50 border-rose-200 border p-4 rounded-2xl font-black text-rose-600 text-xl outline-none" value={formData.targetWeight || ''} onChange={e => setFormData({...formData, targetWeight: Number(e.target.value)})} />
+              <div className="col-span-full">
+                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Peso Objetivo</label>
+                 <input type="number" className="w-full bg-purple-50 border-purple-200 border-2 p-4 rounded-xl font-black text-[#4B2C69] text-xl" value={formData.targetWeight || ''} onChange={e => setFormData({...formData, targetWeight: Number(e.target.value)})} />
               </div>
             </div>
           </div>
@@ -245,44 +207,35 @@ const App: React.FC = () => {
         return (
           <div className="space-y-6 animate-in slide-in-from-right-4">
             <h3 className="text-xl font-black text-slate-800 flex items-center gap-2 uppercase tracking-tighter">
-              <i className="fas fa-stethoscope text-rose-600"></i> 3. Diagnóstico Digestivo
+              <i className="fas fa-stethoscope text-[#4B2C69]"></i> 3. Salud Digestiva
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="col-span-full space-y-4">
-                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-3">Hinchazón Abdominal</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {['none', 'occasional', 'frequent'].map(val => (
-                      <button key={val} onClick={() => setFormData({...formData, abdominalBloating: val as any})} className={`py-2 rounded-xl text-[9px] font-bold uppercase border transition-all ${formData.abdominalBloating === val ? 'bg-rose-600 text-white border-rose-600 shadow-md' : 'bg-white text-slate-400 border-slate-200'}`}>
-                        {val === 'none' ? 'Nunca' : val === 'occasional' ? 'Ocasional' : 'Frecuente'}
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="col-span-full bg-slate-50 p-4 rounded-2xl">
+                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-3">Hinchazón Abdominal</label>
+                 <div className="grid grid-cols-3 gap-2">
+                    {['none', 'occasional', 'frequent'].map(v => (
+                      <button key={v} onClick={() => setFormData({...formData, abdominalBloating: v as any})} className={`py-2 rounded-xl text-[9px] font-bold uppercase border ${formData.abdominalBloating === v ? 'bg-[#4B2C69] text-white' : 'bg-white'}`}>
+                        {v === 'none' ? 'Nunca' : v === 'occasional' ? 'A veces' : 'Siempre'}
                       </button>
                     ))}
-                  </div>
-                </div>
-                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-3">Frecuencia Baño (veces/día)</label>
-                  <div className="grid grid-cols-4 gap-2">
-                    {['less-than-1', '1', '2', '3-plus'].map(opt => (
-                      <button key={opt} onClick={() => setFormData({...formData, bathroomFrequency: opt as any})} className={`py-2 rounded-xl text-[9px] font-black border transition-all ${formData.bathroomFrequency === opt ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-400 border-slate-200'}`}>
-                        {opt === 'less-than-1' ? '< 1' : opt === '3-plus' ? '3+' : opt}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                 </div>
               </div>
-              <div className="col-span-full grid grid-cols-2 gap-3 mt-4">
-                {[
-                  { key: 'postMealSleepiness', label: 'Sueño tras comer' },
-                  { key: 'reflux', label: 'Reflujo / Acidez' },
-                  { key: 'constipation', label: 'Estreñimiento' },
-                  { key: 'gas', label: 'Gases' }
-                ].map(item => (
-                  <label key={item.key} className={`flex items-center gap-3 p-4 border rounded-2xl cursor-pointer transition-all ${formData[item.key as keyof NutriFormData] ? 'bg-rose-50 border-rose-200' : 'bg-white border-slate-100'}`}>
-                    <input type="checkbox" checked={!!formData[item.key as keyof NutriFormData]} onChange={e => setFormData({...formData, [item.key]: e.target.checked})} className="accent-rose-600 w-5 h-5" />
-                    <span className="text-[10px] font-bold uppercase text-slate-700">{item.label}</span>
-                  </label>
-                ))}
-              </div>
+              <label className="flex items-center gap-3 p-4 border rounded-2xl bg-white cursor-pointer">
+                <input type="checkbox" checked={formData.postMealSleepiness} onChange={e => setFormData({...formData, postMealSleepiness: e.target.checked})} className="accent-[#4B2C69] w-5 h-5" />
+                <span className="text-[10px] font-bold uppercase">Sueño post-comida</span>
+              </label>
+              <label className="flex items-center gap-3 p-4 border rounded-2xl bg-white cursor-pointer">
+                <input type="checkbox" checked={formData.reflux} onChange={e => setFormData({...formData, reflux: e.target.checked})} className="accent-[#4B2C69] w-5 h-5" />
+                <span className="text-[10px] font-bold uppercase">Reflujo / Acidez</span>
+              </label>
+              <label className="flex items-center gap-3 p-4 border rounded-2xl bg-white cursor-pointer">
+                <input type="checkbox" checked={formData.constipation} onChange={e => setFormData({...formData, constipation: e.target.checked})} className="accent-[#4B2C69] w-5 h-5" />
+                <span className="text-[10px] font-bold uppercase">Estreñimiento</span>
+              </label>
+              <label className="flex items-center gap-3 p-4 border rounded-2xl bg-white cursor-pointer">
+                <input type="checkbox" checked={formData.insulinResistanceHistory} onChange={e => setFormData({...formData, insulinResistanceHistory: e.target.checked})} className="accent-[#4B2C69] w-5 h-5" />
+                <span className="text-[10px] font-bold uppercase">Historial Resistencia Insulina</span>
+              </label>
             </div>
           </div>
         );
@@ -290,176 +243,117 @@ const App: React.FC = () => {
         return (
           <div className="space-y-6 animate-in slide-in-from-right-4">
             <h3 className="text-xl font-black text-slate-800 flex items-center gap-2 uppercase tracking-tighter">
-              <i className="fas fa-utensils text-rose-600"></i> 4. Nutrición de Precisión
+              <i className="fas fa-utensils text-[#4B2C69]"></i> 4. Nutrición de Precisión
             </h3>
             <div className="space-y-4">
-              <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100">
+              <div className="bg-slate-50 p-6 rounded-3xl border">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Protocolo de Alimentación</label>
                 <select className="w-full bg-white border p-3 rounded-xl text-xs outline-none mb-3" value={formData.specificDietPreference} onChange={e => setFormData({...formData, specificDietPreference: e.target.value})}>
                   {Object.keys(dietDescriptions).map(diet => (
                     <option key={diet} value={diet}>{diet}</option>
                   ))}
                 </select>
-                <div className="bg-white/50 p-4 rounded-xl border border-slate-200 mb-3">
-                  <p className="text-[10px] text-slate-500 font-bold uppercase mb-1">Descripción del Protocolo:</p>
-                  <p className="text-xs text-slate-600 italic leading-relaxed">{dietDescriptions[formData.specificDietPreference]}</p>
-                </div>
-                {formData.specificDietPreference === 'Otro' && (
-                  <input className="w-full bg-white border p-3 rounded-xl text-xs outline-none" placeholder="Describe tu dieta o indicación específica..." value={formData.otherDietPreference} onChange={e => setFormData({...formData, otherDietPreference: e.target.value})} />
-                )}
+                <p className="text-[10px] text-slate-500 italic leading-relaxed">{dietDescriptions[formData.specificDietPreference]}</p>
               </div>
-
-              {/* SECCIÓN DE ALERGIAS */}
-              <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-4">Alergias e Intolerancias</label>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
-                  {commonAllergiesList.map(allergy => (
-                    <button 
-                      key={allergy} 
-                      onClick={() => toggleAllergy(allergy)}
-                      className={`py-2 px-3 rounded-xl text-[10px] font-bold uppercase border transition-all ${formData.commonAllergies.includes(allergy) ? 'bg-rose-600 text-white border-rose-600 shadow-md' : 'bg-white text-slate-400 border-slate-200'}`}
-                    >
-                      {allergy}
-                    </button>
-                  ))}
-                </div>
-                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Otras Alergias / Detalles Específicos</label>
-                <textarea 
-                  className="w-full bg-white border p-3 rounded-xl text-xs h-20 outline-none" 
-                  value={formData.allergies} 
-                  onChange={e => setFormData({...formData, allergies: e.target.value})} 
-                  placeholder="Ej: Intolerancia severa a la fructosa, alergia a colorantes..."
-                />
-              </div>
-
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Comidas Favoritas</label>
                   <textarea className="w-full bg-slate-50 border p-3 rounded-xl text-xs h-20 outline-none" value={formData.favoriteFoods} onChange={e => setFormData({...formData, favoriteFoods: e.target.value})} />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-rose-400 uppercase tracking-widest block mb-1">Alimentos que Evitas</label>
-                  <textarea className="w-full bg-rose-50/30 border border-rose-100 p-3 rounded-xl text-xs h-20 outline-none" value={formData.dislikedFoods} onChange={e => setFormData({...formData, dislikedFoods: e.target.value})} />
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Alimentos que Evitas</label>
+                  <textarea className="w-full bg-rose-50 border p-3 rounded-xl text-xs h-20 outline-none" value={formData.dislikedFoods} onChange={e => setFormData({...formData, dislikedFoods: e.target.value})} />
                 </div>
+              </div>
+              <div className="bg-purple-50 p-4 rounded-2xl border border-purple-100">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" checked={formData.emotionalEating} onChange={e => setFormData({...formData, emotionalEating: e.target.checked})} className="accent-[#4B2C69] w-5 h-5" />
+                  <span className="text-[10px] font-black uppercase text-[#4B2C69]">Sufro de Hambre Emocional (Ansiedad)</span>
+                </label>
               </div>
             </div>
           </div>
         );
       case 5:
         return (
-          <div className="space-y-8 animate-in slide-in-from-right-4">
+          <div className="space-y-6 animate-in slide-in-from-right-4">
             <h3 className="text-xl font-black text-slate-800 flex items-center gap-2 uppercase tracking-tighter">
-              <i className="fas fa-person-running text-rose-600"></i> 5. Rendimiento y Vida
+              <i className="fas fa-person-running text-[#4B2C69]"></i> 5. Estilo de Vida
             </h3>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-blue-50/50 p-6 rounded-[2.5rem] border border-blue-100">
-                <label className="text-[11px] font-black text-blue-900 uppercase tracking-widest block mb-2">Agua Diaria (L)</label>
-                <input type="number" step="0.5" className="w-full bg-white border border-blue-200 p-4 rounded-2xl text-xl font-black text-blue-900 outline-none" value={formData.waterIntake || ''} onChange={e => setFormData({...formData, waterIntake: Number(e.target.value)})} />
-              </div>
-
-              <div className="bg-indigo-50/50 p-6 rounded-[2.5rem] border border-indigo-100">
-                <label className="text-[11px] font-black text-indigo-900 uppercase tracking-widest block mb-4 text-center">Nivel de Actividad</label>
-                <div className="grid grid-cols-1 gap-2">
+            <div className="space-y-6">
+              <div className="bg-slate-50 p-6 rounded-3xl border">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-4">Nivel de Actividad Física</label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                   {activityLevels.map(lvl => (
-                    <button 
-                      key={lvl.id} 
-                      onClick={() => setFormData({...formData, activityLevel: lvl.id as any})}
-                      className={`flex flex-col items-center p-3 rounded-xl border transition-all ${formData.activityLevel === lvl.id ? 'bg-indigo-600 text-white shadow-md border-indigo-600' : 'bg-white text-slate-500 border-indigo-100 hover:border-indigo-300'}`}
-                    >
+                    <button key={lvl.id} onClick={() => setFormData({...formData, activityLevel: lvl.id as any})} className={`flex flex-col items-start p-3 rounded-xl border transition-all ${formData.activityLevel === lvl.id ? 'bg-[#4B2C69] text-white border-[#4B2C69]' : 'bg-white text-slate-500 border-slate-200'}`}>
                       <span className="text-[10px] font-black uppercase">{lvl.label}</span>
-                      <span className="text-[8px] opacity-70 leading-none mt-1">{lvl.desc}</span>
+                      <span className="text-[8px] opacity-70 mt-1">{lvl.desc}</span>
                     </button>
                   ))}
                 </div>
               </div>
-            </div>
-
-            <div className="bg-slate-50 p-6 rounded-[2.5rem] border border-slate-100">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-4">Actividad Principal</label>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {activitySegments.map(seg => (
-                  <button key={seg.id} onClick={() => setFormData({ ...formData, exerciseType: seg.label })} className={`flex flex-col items-center justify-center p-4 rounded-2xl border transition-all gap-2 ${formData.exerciseType === seg.label ? 'bg-slate-900 text-white border-slate-900 shadow-lg' : 'bg-white text-slate-400 border-slate-200 hover:border-rose-200'}`}>
-                    <i className={`fas ${seg.icon} text-lg`}></i>
-                    <span className="text-[9px] font-bold uppercase text-center leading-tight">{seg.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {formData.exerciseType !== 'No hago actividad' && (
-              <div className="bg-slate-50 p-6 rounded-[2.5rem] border border-slate-100">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-3">Sesiones por semana</label>
-                <div className="grid grid-cols-7 gap-2">
-                  {[1, 2, 3, 4, 5, 6, 7].map(num => (
-                    <button key={num} onClick={() => setFormData({...formData, exerciseFrequency: num})} className={`py-3 rounded-xl text-sm font-black border transition-all ${formData.exerciseFrequency === num ? 'bg-slate-900 text-white' : 'bg-white text-slate-400'}`}>
-                      {num}
-                    </button>
-                  ))}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
+                  <label className="text-[10px] font-bold text-blue-900 uppercase block mb-1">Agua (Litros/día)</label>
+                  <input type="number" step="0.5" className="w-full bg-white border border-blue-200 p-2 rounded-lg font-black text-blue-900" value={formData.waterIntake} onChange={e => setFormData({...formData, waterIntake: Number(e.target.value)})} />
+                </div>
+                <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100">
+                  <label className="text-[10px] font-bold text-indigo-900 uppercase block mb-1">Sueño (Horas/día)</label>
+                  <input type="number" className="w-full bg-white border border-indigo-200 p-2 rounded-lg font-black text-indigo-900" value={formData.sleepDuration} onChange={e => setFormData({...formData, sleepDuration: Number(e.target.value)})} />
                 </div>
               </div>
-            )}
+            </div>
           </div>
         );
       case 6:
         return (
           <div className="space-y-6 text-center py-10">
-            <div className="w-20 h-20 bg-emerald-500 text-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl"><i className="fas fa-check text-2xl"></i></div>
-            <h3 className="text-3xl font-black text-slate-800 uppercase tracking-tighter leading-none">Análisis Completo Listo</h3>
-            <p className="text-slate-500 font-bold uppercase text-[10px] tracking-widest mt-4">Todo está preparado para generar tu protocolo de 7 días, calorías y ayuno.</p>
+            <Logo />
+            <div className="w-20 h-20 bg-emerald-500 text-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl animate-bounce"><i className="fas fa-check text-2xl"></i></div>
+            <h3 className="text-3xl font-black text-slate-800 uppercase tracking-tighter leading-none">Evaluación Técnica Lista</h3>
+            <p className="text-slate-500 font-bold uppercase text-[10px] tracking-widest mt-4">Todo está preparado para generar tu protocolo de acompañamiento CBS.</p>
           </div>
         );
       default: return null;
     }
   };
 
-  const handleGenerate = async () => {
-    if (!formData.name || formData.weight <= 0 || formData.height <= 0) {
-      alert("Por favor completa los datos básicos (Nombre, Peso, Altura).");
-      return;
-    }
-    setLoading(true);
-    try {
-      const result = await generateChileanPlan(formData);
-      setPlan(result);
-      setActiveDayIdx(0); 
-    } catch (e) {
-      console.error(e);
-      alert("Error en la conexión. Reintenta.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const handlePrint = () => window.print();
 
   return (
     <div className="min-h-screen bg-[#FDFCFB] text-slate-900 font-sans">
-      <header className="bg-white border-b border-stone-200 py-4 px-8 sticky top-0 z-50 shadow-sm flex justify-between items-center">
-        <h1 className="text-xl font-black tracking-tighter uppercase">Balloom <span className="text-rose-600">Clinic</span></h1>
+      <header className="bg-white border-b border-stone-200 py-6 px-8 sticky top-0 z-50 shadow-sm flex justify-between items-center no-print">
+        <div className="flex items-center gap-4">
+           <Logo />
+           <div className="hidden md:block">
+             <h1 className="text-xl font-black tracking-tighter uppercase text-[#4B2C69]">BALLOOM <span className="text-rose-600">CLINIC</span></h1>
+             <p className="text-[8px] font-bold uppercase text-slate-400">Chile - Soporte Nutricional Experto</p>
+           </div>
+        </div>
       </header>
 
       <main className="max-w-6xl mx-auto px-6 mt-10 pb-24">
         {!plan && !loading && (
-          <div className="max-w-3xl mx-auto bg-white rounded-[2.5rem] shadow-2xl border border-slate-100 overflow-hidden">
-            <div className="bg-slate-900 p-8 text-white flex justify-between items-center">
+          <div className="max-w-3xl mx-auto bg-white rounded-[2.5rem] shadow-2xl border border-slate-100 overflow-hidden no-print">
+            <div className="bg-[#4B2C69] p-8 text-white flex justify-between items-center">
               <div>
-                <h2 className="text-xl font-black uppercase tracking-tighter">Diagnóstico Balloom</h2>
-                <p className="text-rose-400 font-bold text-[9px] uppercase tracking-widest">IA Metabólica Avanzada</p>
+                <h2 className="text-xl font-black uppercase tracking-tighter">Diagnóstico Integral</h2>
+                <p className="text-[#C5A059] font-bold text-[9px] uppercase tracking-widest">Protocolo Chile CBS</p>
               </div>
-              <div className="flex gap-1.5">
-                {[1, 2, 3, 4, 5, 6].map(s => (
-                  <div key={s} className={`h-1.5 w-4 rounded-full ${step >= s ? 'bg-rose-500' : 'bg-slate-700'}`}></div>
-                ))}
+              <div className="flex gap-1">
+                {[1, 2, 3, 4, 5, 6].map(s => <div key={s} className={`h-1.5 w-4 rounded-full ${step >= s ? 'bg-[#C5A059]' : 'bg-white/20'}`}></div>)}
               </div>
             </div>
             <div className="p-10">
+              {error && <div className="mb-6 p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs font-bold">{error}</div>}
               {renderStep()}
               <div className="flex justify-between items-center mt-12 pt-8 border-t">
                 {step > 1 && <button onClick={() => setStep(step - 1)} className="text-slate-400 font-bold text-[10px] uppercase">Atrás</button>}
                 <div className="ml-auto">
                   {step < 6 ? (
-                    <button onClick={() => setStep(step + 1)} className="bg-slate-900 text-white px-8 py-3.5 rounded-xl font-black text-[10px] uppercase">Siguiente</button>
+                    <button onClick={() => setStep(step + 1)} className="bg-[#4B2C69] text-white px-8 py-3.5 rounded-xl font-black text-[10px] uppercase shadow-lg">Siguiente</button>
                   ) : (
-                    <button onClick={handleGenerate} className="bg-rose-600 text-white px-10 py-4 rounded-xl font-black text-[10px] uppercase shadow-xl hover:scale-105 transition-all">Generar Plan Maestro</button>
+                    <button onClick={handleGenerate} className="bg-rose-600 text-white px-10 py-4 rounded-xl font-black text-[10px] uppercase shadow-xl hover:scale-105 transition-all">Generar Plan Maestro Chile</button>
                   )}
                 </div>
               </div>
@@ -468,147 +362,73 @@ const App: React.FC = () => {
         )}
 
         {loading && (
-          <div className="text-center py-40 animate-in fade-in">
-             <div className="w-20 h-20 border-4 border-rose-600 border-t-transparent rounded-full animate-spin mx-auto mb-10"></div>
-             <h2 className="text-2xl font-black text-slate-800 uppercase tracking-tighter">{loadingMessages[loadingStep]}</h2>
-             <p className="text-[10px] text-slate-400 font-bold uppercase mt-6">IA Metabólica Procesando...</p>
+          <div className="text-center py-40 no-print animate-pulse">
+             <Logo />
+             <div className="w-16 h-1 bg-slate-200 mx-auto my-10 relative overflow-hidden"><div className="absolute inset-0 bg-[#4B2C69] animate-progress"></div></div>
+             <h2 className="text-2xl font-black text-[#4B2C69] uppercase tracking-tighter">{loadingMessages[loadingStep]}</h2>
+             <p className="text-[10px] text-slate-400 font-bold uppercase mt-6 italic">IA Metabólica Procesando...</p>
           </div>
         )}
 
         {plan && (
           <div className="animate-in fade-in space-y-12">
-            <div className="bg-white p-12 rounded-[4rem] shadow-2xl border border-slate-50">
-              <div className="border-b-8 border-slate-900 pb-12 mb-12 flex flex-col md:flex-row justify-between items-end gap-10">
-                <div className="flex-grow">
-                  <h1 className="text-2xl font-black uppercase tracking-tighter">Balloom <span className="text-rose-600">Clinic</span></h1>
-                  <h2 className="text-5xl font-black text-slate-900 tracking-tighter uppercase mt-2 leading-[0.9]">Plan Maestro de<br/><span className="text-rose-600">7 Días</span></h2>
-                </div>
-                <div className="bg-slate-900 p-8 rounded-[2.5rem] text-white min-w-[340px] shadow-2xl">
-                  <div className="space-y-3 text-[10px] font-bold uppercase tracking-widest">
-                    <div className="flex justify-between border-b border-white/10 pb-1"><span>Paciente:</span> <span>{formData.name}</span></div>
-                    <div className="flex justify-between"><span className="text-rose-500">IMC:</span> <span className="text-rose-500 font-black">{liveBMI}</span></div>
-                    <div className="flex justify-between"><span className="text-indigo-400">Nivel:</span> <span className="text-indigo-400 font-black">{formData.activityLevel.toUpperCase()}</span></div>
+            <div className="bg-white p-6 md:p-12 rounded-[3rem] shadow-2xl border border-slate-50">
+              {/* CABECERA REPORTE */}
+              <div className="border-b-4 border-[#4B2C69] pb-12 mb-12 flex flex-col md:flex-row justify-between items-center gap-10">
+                <div className="flex items-center gap-6">
+                  <Logo />
+                  <div>
+                    <h1 className="text-3xl font-black uppercase text-[#4B2C69]">GUÍA CBS CHILE</h1>
+                    <h2 className="text-4xl font-black text-slate-900 leading-[0.9] uppercase">Plan de Soporte<br/><span className="text-[#C5A059]">Balloon Slim</span></h2>
                   </div>
                 </div>
-              </div>
-
-              {/* TARJETA DE META CALÓRICA PROMINENTE */}
-              <div className="mb-12 bg-slate-900 p-8 rounded-[3rem] text-white shadow-2xl flex flex-col md:flex-row items-center justify-between gap-6 border-[6px] border-slate-800 overflow-hidden relative">
-                <div className="relative z-10">
-                  <p className="text-[10px] font-black uppercase text-rose-400 tracking-[0.4em] mb-2 flex items-center gap-2">
-                    <i className="fas fa-fire-alt"></i> Meta Calórica Diaria Asignada
-                  </p>
-                  <p className="text-7xl font-black tracking-tighter leading-none">{plan.dailyCalories || 0} <span className="text-2xl font-bold text-slate-400 uppercase tracking-widest ml-1">Kcal</span></p>
-                </div>
-                <div className="bg-emerald-500/10 p-6 rounded-[2.5rem] border border-emerald-500/20 text-center relative z-10 backdrop-blur-sm min-w-[200px]">
-                  <p className="text-[9px] font-black text-emerald-400 uppercase tracking-widest mb-1">Impacto Actividad</p>
-                  <p className="text-3xl font-black text-white">+{estimatedExerciseBurn}</p>
-                  <p className="text-[9px] font-bold text-slate-500 uppercase">Calorías / Día</p>
-                </div>
-                <i className="fas fa-bolt absolute -right-8 -bottom-8 text-white/5 text-[15rem] pointer-events-none"></i>
-              </div>
-
-              <div className="grid md:grid-cols-2 gap-8 mb-12">
-                <div className="bg-slate-50 p-10 rounded-[3rem] border border-slate-100">
-                  <h3 className="text-[11px] font-black text-rose-600 uppercase mb-4 tracking-[0.4em]">Justificación Médica</h3>
-                  <p className="text-slate-800 text-lg leading-relaxed italic text-justify">{plan.justificationSummary || "No disponible."}</p>
-                </div>
-                <div className="bg-slate-50 p-10 rounded-[3rem] text-slate-800 border border-slate-100 flex flex-col justify-center">
-                  <h3 className="text-[11px] font-black text-slate-400 uppercase mb-4 tracking-[0.4em]">Análisis Metabólico Profundo</h3>
-                  <p className="text-slate-700 text-lg leading-relaxed italic text-justify">{plan.metabolicBreakdown || "No disponible."}</p>
+                <div className="bg-slate-900 p-8 rounded-2xl text-white min-w-[340px] shadow-2xl text-[10px] font-bold uppercase tracking-widest">
+                  <p className="flex justify-between border-b border-white/10 pb-1 mb-1"><span>PACIENTE:</span> <span>{formData.name}</span></p>
+                  <p className="flex justify-between border-b border-white/10 pb-1 mb-1"><span>RESULTADO:</span> <span>{formData.specificResultGoal}</span></p>
+                  <p className="flex justify-between"><span>META:</span> <span className="text-[#C5A059] font-black">{plan.dailyCalories} Kcal</span></p>
                 </div>
               </div>
 
-              <div className="grid md:grid-cols-2 gap-8 mb-12">
-                {/* PROTOCOLO DE AYUNO EXPANDIDO */}
-                <div className="bg-emerald-50 p-10 rounded-[3.5rem] border border-emerald-100 shadow-sm flex flex-col">
-                  <h3 className="text-[11px] font-black text-emerald-600 uppercase mb-6 tracking-[0.4em] flex items-center gap-2">
-                    <i className="fas fa-calendar-check"></i> Ciclo de Ayuno Semanal
-                  </h3>
-                  <div className="space-y-6 flex-grow">
-                    <div className="flex items-center justify-between border-b border-emerald-100 pb-4">
-                      <div>
-                        <p className="text-[9px] font-black text-emerald-700 uppercase opacity-60">Protocolo Seleccionado</p>
-                        <p className="text-3xl font-black text-emerald-900 tracking-tighter">{plan.fastingDetails?.type || plan.fastingSchedule || "No especificado"}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-[9px] font-black text-emerald-700 uppercase opacity-60">Ventana Alimentación</p>
-                        <p className="text-xl font-bold text-emerald-800">{plan.fastingDetails?.window || "8 Horas"}</p>
-                      </div>
-                    </div>
-
-                    <div>
-                      <h4 className="text-[10px] font-black text-emerald-700 uppercase mb-3 flex items-center gap-2">
-                        <i className="fas fa-mug-hot"></i> Líquidos Permitidos (Ayuno)
-                      </h4>
-                      <div className="flex flex-wrap gap-2">
-                        {(plan.fastingDetails?.allowedLiquids || ["Agua", "Café solo", "Té sin azúcar"]).map((liq, lIdx) => (
-                          <span key={lIdx} className="bg-white/80 border border-emerald-100 px-3 py-1.5 rounded-full text-[10px] font-bold text-emerald-800 shadow-sm">
-                            {liq}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="bg-emerald-600/5 p-5 rounded-2xl border border-emerald-200">
-                      <h4 className="text-[10px] font-black text-emerald-700 uppercase mb-2">Reglas Ventana de Alimentación</h4>
-                      <p className="text-xs text-emerald-900 leading-relaxed italic">{plan.fastingDetails?.feedingRules || "Priorizar proteínas y grasas saludables para romper el ayuno sin picos de insulina."}</p>
-                    </div>
+              {/* PROTOCOLO BALLOOM SLIM (SOPORTE CENTRAL) */}
+              <div className="mb-12 bg-white border-4 border-[#C5A059] p-10 rounded-[3rem] shadow-2xl relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-4 bg-[#C5A059] text-white font-black text-[10px] rounded-bl-3xl">ESTRICTAMENTE NECESARIO</div>
+                <h3 className="text-2xl font-black text-[#4B2C69] uppercase tracking-tighter mb-6 flex items-center gap-3">
+                  <i className="fas fa-capsules"></i> ¿Cómo tomar tus cápsulas Balloon Slim?
+                </h3>
+                <div className="grid md:grid-cols-2 gap-8">
+                  <div className="bg-purple-50 p-6 rounded-2xl border border-purple-100">
+                    <h4 className="text-[11px] font-black text-[#4B2C69] uppercase mb-4 tracking-widest">Horario Sugerido</h4>
+                    <p className="text-xl font-black text-[#4B2C69] leading-tight italic">"{plan.balloomSlimSchedule}"</p>
                   </div>
-                </div>
-                
-                {/* PROTOCOLO BALLOOM SLIM MEJORADO */}
-                <div className="space-y-6">
-                  <div className="bg-rose-50 p-10 rounded-[3.5rem] border border-rose-100 h-full flex flex-col justify-start shadow-sm">
-                    <h3 className="text-[11px] font-black text-rose-600 uppercase mb-6 tracking-[0.4em] flex items-center gap-2">
-                      <i className="fas fa-capsules"></i> Cápsulas Balloom Slim
-                    </h3>
-                    
-                    <div className="space-y-6">
-                      <div className="bg-white/80 p-6 rounded-[2.5rem] border border-rose-200 shadow-sm relative overflow-hidden group">
-                        <div className="flex items-center gap-3 mb-2">
-                          <i className="fas fa-clock text-rose-600"></i>
-                          <h4 className="text-[10px] font-black text-rose-700 uppercase">Indicación y Justificación</h4>
-                        </div>
-                        <p className="text-lg font-black text-rose-900 italic leading-tight mb-2">"{plan.balloomSlimSchedule || "Consultar protocolo estándar."}"</p>
-                        <div className="w-10 h-1 bg-rose-200 rounded-full"></div>
-                      </div>
-                      
-                      <div className="bg-rose-900/5 p-6 rounded-[2.5rem] border border-rose-200 shadow-sm">
-                        <div className="flex items-center gap-3 mb-3 text-rose-800">
-                          <i className="fas fa-ban"></i>
-                          <h4 className="text-[10px] font-black uppercase">Criterios de Exclusión (Cuándo evitar)</h4>
-                        </div>
-                        <p className="text-xs text-rose-800 leading-relaxed italic font-medium">
-                          {plan.balloomSlimContraindications || "Siga el protocolo general si no hay síntomas adversos."}
-                        </p>
-                      </div>
-                    </div>
+                  <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200">
+                    <h4 className="text-[11px] font-black uppercase mb-4 tracking-widest">Nota de Saciedad</h4>
+                    <p className="text-xs text-slate-600 leading-relaxed italic">"Balloon Slim genera una saciedad mecánica que le permite comer porciones de comida chilena más pequeñas sin pasar hambre."</p>
                   </div>
                 </div>
               </div>
 
               <div className="grid md:grid-cols-2 gap-8 mb-12">
-                <div className="p-10 border-2 rounded-[3.5rem] bg-white">
-                   <h3 className="text-[11px] font-black text-slate-900 uppercase mb-6 tracking-[0.4em] flex items-center gap-2">
-                     <i className="fas fa-microscope text-rose-600"></i> Análisis Metabólico
-                   </h3>
-                   <p className="text-slate-700 text-lg leading-relaxed whitespace-pre-wrap text-justify">{plan.clinicalAnalysis || "Análisis no disponible."}</p>
+                <div className="bg-slate-50 p-8 rounded-[2.5rem] border border-slate-100">
+                  <h3 className="text-[11px] font-black text-rose-600 uppercase mb-4 tracking-[0.4em]">Justificación Clínica</h3>
+                  <p className="text-slate-800 text-lg leading-relaxed italic text-justify">{plan.justificationSummary}</p>
                 </div>
-                <div className="p-10 border-2 rounded-[3.5rem] bg-slate-50">
-                   <h3 className="text-[11px] font-black text-slate-900 uppercase mb-6 tracking-[0.4em] flex items-center gap-2">
-                     <i className="fas fa-wand-magic-sparkles text-rose-600"></i> Esculpido Corporal
-                   </h3>
-                   <p className="text-slate-700 text-lg leading-relaxed whitespace-pre-wrap text-justify">{plan.bodySculptingAdvice || "Recomendación no disponible."}</p>
+                <div className="bg-slate-50 p-8 rounded-[2.5rem] border border-slate-100">
+                  <h3 className="text-[11px] font-black text-slate-400 uppercase mb-4 tracking-[0.4em]">Métrica Metabólica</h3>
+                  <div className="flex items-end gap-2">
+                    <p className="text-6xl font-black text-slate-900">{plan.dailyCalories}</p>
+                    <p className="text-xl font-bold text-slate-400 mb-2 uppercase">Kcal/Día</p>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-4 leading-relaxed font-medium">Este déficit está calculado para movilizar grasas de reserva aprovechando el control de hambre de la cápsula.</p>
                 </div>
               </div>
 
-              <div className="space-y-12">
+              {/* DIETA INTERACTIVA (NO-PRINT) */}
+              <div className="no-print space-y-12">
                 <div className="text-center">
-                  <h3 className="text-5xl font-black text-slate-900 uppercase tracking-tighter">Calendario Nutricional</h3>
+                  <h3 className="text-4xl font-black text-slate-900 uppercase tracking-tighter">Calendario de Acompañamiento Chileno</h3>
                   <div className="flex justify-center gap-2 mt-8 flex-wrap">
                     {(plan?.masterWeek || []).map((day, idx) => (
-                      <button key={idx} onClick={() => setActiveDayIdx(idx)} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all duration-300 ${activeDayIdx === idx ? 'bg-rose-600 text-white shadow-xl scale-105' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>
+                      <button key={idx} onClick={() => setActiveDayIdx(idx)} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all duration-300 ${activeDayIdx === idx ? 'bg-[#4B2C69] text-white shadow-xl scale-105' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>
                         {day.dayName}
                       </button>
                     ))}
@@ -617,22 +437,26 @@ const App: React.FC = () => {
 
                 <div className="grid md:grid-cols-2 gap-8">
                   {(plan?.masterWeek?.[activeDayIdx]?.meals || []).map((meal, mIdx) => (
-                    <div key={mIdx} className="bg-white border-2 p-8 rounded-[3rem] shadow-sm hover:border-rose-100 transition-colors">
+                    <div key={mIdx} className="bg-white border-2 p-8 rounded-[2.5rem] shadow-sm relative overflow-hidden">
+                      {meal.label.toLowerCase().includes('almuerzo') || meal.label.toLowerCase().includes('cena') ? (
+                        <div className="absolute top-0 right-0 bg-[#C5A059] text-white px-3 py-1 text-[8px] font-black uppercase rounded-bl-xl shadow-lg">Toma de Cápsula CBS 45min antes</div>
+                      ) : null}
                       <div className="flex justify-between items-start mb-6">
                         <div>
-                          <p className="text-rose-500 font-black text-[9px] uppercase tracking-widest">{meal.time}</p>
+                          <p className="text-[#C5A059] font-black text-[9px] uppercase tracking-widest">{meal.time}</p>
                           <h6 className="font-black text-slate-900 text-2xl uppercase tracking-tighter">{meal.label}</h6>
                         </div>
                         <i className="fas fa-utensils text-slate-100 text-2xl"></i>
                       </div>
                       <div className="space-y-6">
                         {(meal?.options || []).map((opt, oIdx) => (
-                          <div key={oIdx} className="bg-slate-50/50 p-6 rounded-[2rem] border border-slate-100 relative group">
-                            <span className="absolute top-4 right-4 bg-emerald-100 text-emerald-700 text-[9px] font-black px-2 py-1 rounded-lg shadow-sm">
-                              {opt.calories || 0} Kcal
-                            </span>
-                            <p className="font-black text-slate-800 text-xl mb-3 pr-20">{opt.name}</p>
-                            <p className="text-xs text-slate-500 italic font-serif leading-relaxed border-t border-slate-100 pt-3">{opt.preparation}</p>
+                          <div key={oIdx} className={`p-6 rounded-[1.5rem] border-l-4 relative ${oIdx === 1 ? 'bg-emerald-50 border-emerald-500' : 'bg-slate-50 border-[#4B2C69]'}`}>
+                            <div className="flex justify-between items-start mb-2">
+                               <p className="font-black text-slate-800 text-xs uppercase">{oIdx === 1 ? '💰 Opción Económica / Feria' : '🍽️ Opción Estándar'}</p>
+                               <span className="text-[9px] font-black text-slate-400 bg-white px-2 py-1 rounded shadow-sm">{opt.calories || 0} Kcal</span>
+                            </div>
+                            <p className="font-black text-slate-900 text-xl pr-10">{opt.name}</p>
+                            <p className="text-xs text-slate-500 italic leading-relaxed border-t mt-3 pt-3">{opt.preparation}</p>
                           </div>
                         ))}
                       </div>
@@ -641,10 +465,40 @@ const App: React.FC = () => {
                 </div>
               </div>
 
-              <div className="mt-20 pt-10 border-t flex justify-center gap-4 print:hidden">
-                <button onClick={() => setPlan(null)} className="text-slate-400 font-bold uppercase text-xs hover:text-rose-600 transition-colors">Nueva Evaluación</button>
-                <button onClick={() => window.print()} className="bg-slate-900 text-white px-10 py-4 rounded-xl font-black text-[10px] uppercase shadow-xl hover:scale-105 transition-all">
-                  <i className="fas fa-print mr-2"></i> IMPRIMIR REPORTE COMPLETO
+              {/* VISTA DE IMPRESIÓN COMPLETA (PRINT-ONLY) */}
+              <div className="print-only mt-10 space-y-16">
+                 <h3 className="text-3xl font-black text-center uppercase tracking-widest border-b-2 border-[#4B2C69] pb-4 mb-10">Tu Plan de Alimentación Chileno Semanal</h3>
+                 {(plan?.masterWeek || []).map((day, idx) => (
+                  <div key={idx} className="page-break-before mb-10 border-b pb-10">
+                    <div className="bg-[#4B2C69] text-white p-4 rounded-xl flex justify-between items-center mb-6">
+                      <h4 className="text-2xl font-black uppercase tracking-tighter">{day.dayName}</h4>
+                      <p className="text-[10px] font-bold uppercase">Protocolo Balloon Slim Chile</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      {day.meals.map((meal, mIdx) => (
+                        <div key={mIdx} className="border p-4 rounded-2xl bg-white shadow-sm">
+                          <h5 className="font-black text-slate-900 text-sm uppercase mb-2">{meal.label} ({meal.time})</h5>
+                          <div className="space-y-4">
+                             {meal.options.map((opt, oIdx) => (
+                               <div key={oIdx} className="bg-slate-50 p-3 rounded-lg text-[9px] border-l-2 border-[#4B2C69]">
+                                 <p className="font-black uppercase">{oIdx === 1 ? '[Económica] ' : ''}{opt.name}</p>
+                                 <p className="text-slate-500 mt-1">{opt.preparation}</p>
+                                 <p className="text-emerald-600 font-bold mt-1 uppercase">{opt.calories} kcal</p>
+                               </div>
+                             ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                 ))}
+              </div>
+
+              {/* ACCIONES FINALES */}
+              <div className="mt-20 pt-10 border-t flex flex-col md:flex-row justify-center items-center gap-6 no-print">
+                <button onClick={() => { setPlan(null); setError(null); setStep(1); }} className="text-slate-400 font-bold uppercase text-xs hover:text-rose-600 transition-colors">Nueva Evaluación</button>
+                <button onClick={handlePrint} className="bg-[#4B2C69] text-white px-10 py-5 rounded-2xl font-black text-[11px] uppercase shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center gap-3">
+                  <i className="fas fa-file-pdf text-[#C5A059]"></i> IMPRIMIR GUÍA DE ACOMPAÑAMIENTO (PDF)
                 </button>
               </div>
             </div>
@@ -653,12 +507,28 @@ const App: React.FC = () => {
       </main>
 
       <style>{`
+        @keyframes progress { 0% { left: -100%; } 100% { left: 100%; } }
+        .animate-progress { position: absolute; top: 0; height: 100%; width: 100%; animation: progress 2s linear infinite; }
+        .no-print { display: block; }
+        .print-only { display: none; }
+        
         @media print {
-          @page { margin: 15mm; }
+          body { background: white !important; }
+          @page { margin: 10mm; size: auto; }
           .max-w-6xl { max-width: 100% !important; margin: 0 !important; }
-          button, header { display: none !important; }
-          .rounded-[4rem] { border-radius: 0 !important; box-shadow: none !important; border: 0 !important; }
+          .no-print { display: none !important; }
+          .print-only { display: block !important; }
+          .rounded-[3rem], .rounded-[2rem] { border-radius: 0 !important; box-shadow: none !important; border: 0 !important; }
+          .page-break-before { page-break-before: always; }
+          .bg-slate-50 { background-color: white !important; }
+          .shadow-2xl, .shadow-sm { box-shadow: none !important; }
+          .flex { display: flex !important; }
+          .grid { display: grid !important; }
+          .text-[#4B2C69] { color: #4B2C69 !important; }
+          .bg-[#4B2C69] { background-color: #4B2C69 !important; -webkit-print-color-adjust: exact; }
+          .border-[#C5A059] { border-color: #C5A059 !important; }
         }
+        
         .animate-in { animation: fadeIn 0.4s ease-out forwards; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>

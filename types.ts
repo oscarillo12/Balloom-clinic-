@@ -9,6 +9,8 @@ export interface NutriFormData {
   alcoholConsumption: 'none' | 'occasional' | 'frequent';
   sedentaryHours: number;
   consultationReason: string;
+  specificResultGoal: string; // Nuevo: ¿Qué resultado buscas lograr?
+  treatmentAspiration: string; // Nuevo: ¿A qué aspiras con este tratamiento?
   insulinResistanceHistory: boolean;
   medicalConditions: string[];
   otherMedicalCondition: string;

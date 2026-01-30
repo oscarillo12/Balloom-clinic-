@@ -2,106 +2,94 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { NutriFormData, NutritionPlan } from "../types";
 
-const getSystemInstruction = (data: NutriFormData) => `Eres el Director Clínico Superior de Balloom Clinic. Tu especialidad es la medicina metabólica y estética de precisión.
+const getSystemInstruction = (data: NutriFormData) => `Eres el Director Clínico Superior de Balloom Clinic, experto en el Protocolo Control Balloon Slim (CBS) para el público de CHILE. 
 
-TU MISIÓN:
-Generar un informe de diagnóstico médico y nutricional de ALTA GAMA que sea técnicamente impecable y visualmente estructurado.
+TU ENFOQUE:
+1. PÉRDIDA DE PESO EN CHILE: Diseña dietas con alimentos disponibles en ferias y supermercados chilenos. Usa términos locales (Hallulla, Marraqueta, Jurel, Zapallo, Merkén, etc.).
+2. OPCIONES ECONÓMICAS: Para cada tiempo de comida (Desayuno, Almuerzo, Once/Merienda, Cena), debes proporcionar obligatoriamente una opción "Estándar" y una opción "Económica/Low Cost" (ej: usando jurel, huevos, legumbres, verduras de estación).
+3. SACIEDAD MECÁNICA CBS: Las cápsulas Balloon Slim son el soporte principal. Explica cómo estas permiten comer platos chilenos tradicionales en porciones controladas.
+4. INSTRUCCIÓN CLAVE: La cápsula se toma 45 min antes de las comidas de mayor volumen (Almuerzo y Cena).
 
 REQUISITOS DEL INFORME:
-1. SEMANA COMPLETA (7 DÍAS): Debes generar de Lunes a Domingo sin excepción.
-2. CALORÍAS POR PLATO: Cada opción de comida DEBE tener su valor calórico específico en el campo 'calories'.
-3. VARIEDAD: Proporciona 2-3 opciones por comida para evitar el aburrimiento del paciente.
-4. PROTOCOLO BALLOOM SLIM (CRÍTICO): 
-   - 'balloomSlimSchedule': Define exactamente cuándo y cómo tomarlo. DEBE incluir una justificación metabólica basada en los datos del paciente (ej: "Debido a tu reporte de sueño tras comer, se recomienda 30 min antes del almuerzo para mitigar el pico insulínico").
-   - 'balloomSlimContraindications': Proporciona advertencias de seguridad y CRITERIOS DE EXCLUSIÓN. Indica cuándo el paciente NO debe tomar la cápsula (ej: "Suspender si el nivel de estrés autopercibido es extremo ese día para no sobreestimular el cortisol" o "No tomar si no se han dormido al menos 6 horas").
-5. PROPUESTA DE AYUNO (ESTRUCTURADO): 
-   - 'fastingSchedule': Resumen corto del ciclo (ej: "16/8 Ciclo Metabólico").
-   - 'fastingDetails': Desglose técnico incluyendo tipo de ayuno, ventana horaria sugerida, líquidos permitidos y reglas de la ventana de alimentación.
+- Genera 7 DÍAS completos de Lunes a Domingo.
+- 'balloomSlimSchedule': Indica: "Tomar 1 cápsula CBS con 2 vasos de agua 45 min antes del Almuerzo y 45 min antes de la Cena".
+- 'justificationSummary': Enfócate en cómo el protocolo le ayudará en su meta de "${data.specificResultGoal}" sin dejar de comer comida chilena, pero en porciones reducidas por la saciedad del balón.
+- 'masterWeek': Los platos deben sonar chilenos (ej: Charquicán de pavo, Lentejas con zapallo, Reineta a la plancha, Pan integral con palta).
 
-SECCIONES CLÍNICAS:
-- 'justificationSummary': Inicia con: "Basado en la evaluación integral del paciente [Nombre], considerando su motivo de consulta ([Motivo]) y sus antecedentes de [Antecedentes], se le sugiere..."
-- 'clinicalAnalysis': Análisis profundo de marcadores inflamatorios y resistencia a la insulina.
-- 'bodySculptingAdvice': Cómo atacar la grasa localizada según los datos de cintura y zonas a tratar.
-- 'metabolicBreakdown': Justificación técnica del TDEE y el déficit aplicado considerando su nivel de actividad (${data.activityLevel}).`;
+CALORÍAS:
+Meta diaria: ${data.weight * 21} kcal aproximadamente para asegurar déficit.`;
+
+async function fetchWithRetry(fn: () => Promise<any>, retries = 3, delay = 2000): Promise<any> {
+  try {
+    return await fn();
+  } catch (error: any) {
+    if (retries <= 0) throw error;
+    const isRetryable = error.message?.includes("500") || 
+                        error.message?.includes("Rpc failed") || 
+                        error.message?.includes("xhr error") ||
+                        error.message?.includes("Proxy");
+    
+    if (isRetryable) {
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return fetchWithRetry(fn, retries - 1, delay * 2);
+    }
+    throw error;
+  }
+}
 
 export const generateChileanPlan = async (data: NutriFormData): Promise<NutritionPlan> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
-  const prompt = `GENERAR DIAGNÓSTICO INTEGRAL BALLOOM CLINIC
+  const prompt = `GENERAR PROTOCOLO CBS CHILE - PACIENTE: ${data.name}
   
   FORMATO: JSON ESTRICTO.
-  PACIENTE: ${data.name}, ${data.age} años. Peso ${data.weight}kg, Cintura ${data.waistCircumference}cm.
-  NIVEL ACTIVIDAD: ${data.activityLevel} (Frecuencia: ${data.exerciseFrequency} veces/semana).
-  OBJETIVO: ${data.consultationReason}.
-  CONDICIÓN: ${data.insulinResistanceHistory ? 'Resistencia a la Insulina' : 'Normal'}.
-  SÍNTOMAS REPORTADOS: ${data.postMealSleepiness ? 'Sueño post-prandial' : ''}, ${data.abdominalBloating !== 'none' ? 'Hinchazón' : ''}, Estrés: ${data.stressLevel}.
-  ACTIVIDAD ESPECÍFICA: ${data.exerciseType}.
+  META: ${data.specificResultGoal}.
+  ASPIRACIÓN: ${data.treatmentAspiration}.
+  ESTILO: Chileno, con opciones baratas de feria.
   
-  GENERAR:
-  1. Justificación Médica.
-  2. Análisis Metabólico y Estético.
-  3. Desglose de Calorías y Macros.
-  4. Protocolo Balloom Slim con JUSTIFICACIÓN CLÍNICA de horarios y CRITERIOS DE EXCLUSIÓN claros.
-  5. Calendario Semanal de Ayuno Intermitente con desglose de líquidos y reglas de ventana.
-  6. Plan de 7 días con 2+ opciones por comida y sus calorías individuales.`;
+  REGLA DE OPCIONES:
+  Opción 1: Saludable Estándar.
+  Opción 2: Económica (Usa Jurel, Legumbres, Huevos, etc.).
+  
+  DIETA PREFERIDA: ${data.specificDietPreference}.`;
 
-  const response = await ai.models.generateContent({
-    model: "gemini-3-pro-preview",
-    contents: prompt,
-    config: {
-      systemInstruction: getSystemInstruction(data),
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          justificationSummary: { type: Type.STRING },
-          clinicalAnalysis: { type: Type.STRING },
-          bodySculptingAdvice: { type: Type.STRING },
-          metabolicBreakdown: { type: Type.STRING },
-          bmi: { type: Type.NUMBER },
-          tdee: { type: Type.NUMBER },
-          nutritionalStatus: { type: Type.STRING },
-          dailyCalories: { type: Type.NUMBER },
-          macros: {
-            type: Type.OBJECT,
-            properties: { p: { type: Type.NUMBER }, c: { type: Type.NUMBER }, f: { type: Type.NUMBER } }
-          },
-          balloomSlimProtocol: { type: Type.STRING },
-          balloomSlimSchedule: { type: Type.STRING },
-          balloomSlimContraindications: { type: Type.STRING },
-          metabolicGoals: { type: Type.STRING },
-          fastingSchedule: { type: Type.STRING },
-          fastingDetails: {
-            type: Type.OBJECT,
-            properties: {
-              type: { type: Type.STRING },
-              window: { type: Type.STRING },
-              allowedLiquids: { type: Type.ARRAY, items: { type: Type.STRING } },
-              feedingRules: { type: Type.STRING }
-            }
-          },
-          masterWeek: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                dayName: { type: Type.STRING },
-                meals: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      label: { type: Type.STRING },
-                      time: { type: Type.STRING },
-                      options: {
-                        type: Type.ARRAY,
-                        items: {
-                          type: Type.OBJECT,
-                          properties: {
-                            name: { type: Type.STRING },
-                            ingredients: { type: Type.ARRAY, items: { type: Type.STRING } },
-                            preparation: { type: Type.STRING },
-                            calories: { type: Type.NUMBER }
+  const callApi = async () => {
+    return await ai.models.generateContent({
+      model: "gemini-3-pro-preview",
+      contents: prompt,
+      config: {
+        systemInstruction: getSystemInstruction(data),
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            justificationSummary: { type: Type.STRING },
+            clinicalAnalysis: { type: Type.STRING },
+            dailyCalories: { type: Type.NUMBER },
+            balloomSlimSchedule: { type: Type.STRING },
+            balloomSlimContraindications: { type: Type.STRING },
+            masterWeek: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  dayName: { type: Type.STRING },
+                  meals: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        label: { type: Type.STRING },
+                        time: { type: Type.STRING },
+                        options: {
+                          type: Type.ARRAY,
+                          items: {
+                            type: Type.OBJECT,
+                            properties: {
+                              name: { type: Type.STRING },
+                              preparation: { type: Type.STRING },
+                              calories: { type: Type.NUMBER }
+                            }
                           }
                         }
                       }
@@ -110,15 +98,14 @@ export const generateChileanPlan = async (data: NutriFormData): Promise<Nutritio
                 }
               }
             }
-          },
-          progressionGuide: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { phase: { type: Type.STRING }, objective: { type: Type.STRING }, details: { type: Type.STRING } } } },
-          shoppingList: { type: Type.ARRAY, items: { type: Type.STRING } }
+          }
         }
       }
-    }
-  });
+    });
+  };
 
+  const response = await fetchWithRetry(callApi);
   const text = response.text;
-  if (!text) throw new Error("API falló");
+  if (!text) throw new Error("La respuesta de la IA está vacía.");
   return JSON.parse(text) as NutritionPlan;
 };
